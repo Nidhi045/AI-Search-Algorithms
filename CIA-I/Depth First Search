@@ -1,0 +1,170 @@
+import streamlit as st
+import networkx as nx
+import matplotlib.pyplot as plt
+import time
+from collections import deque
+import random
+
+def visualize_graph(G, path=[], highlight_path_edges=[]):
+    plt.figure(figsize=(14, 9))
+    pos = nx.spring_layout(G)
+    nx.draw(G, pos, with_labels=True, node_color='lightblue', node_size=2000, font_size=16, 
+            font_color='black', edge_color='gray')
+
+    if highlight_path_edges:
+        nx.draw_networkx_edges(G, pos, edgelist=highlight_path_edges, edge_color='red', width=3)
+    if path:
+        path_edges = list(zip(path, path[1:]))
+        nx.draw_networkx_edges(G, pos, edgelist=path_edges, edge_color='green', width=3)
+        nx.draw_networkx_nodes(G, pos, nodelist=path, node_color='green', node_size=2000)
+
+    plt.title("Graph with DFS Path" if path else "Graph Visualization")
+    plt.axis('off')
+    st.pyplot(plt)
+
+def dfs_search():
+    st.title("Depth-First Search (DFS)")
+    with st.expander("Depth-First Search (DFS) Information"):
+        st.info("""
+        - **DFS (Depth-First Search)** is an algorithm used for traversing or searching tree or graph data structures.
+        - Starts at the root (or start node) and explores as far as possible along each branch before backtracking.
+        - DFS uses a **stack** data structure to keep track of the nodes to visit next.
+        - Can be implemented **iteratively** using a stack or **recursively** by implicit call stack.
+        - DFS is suitable for problems where **exploration depth** is more important than breadth.
+        - **Time complexity**: O(V + E), where V is the number of vertices and E is the number of edges.
+        - DFS can be used to determine the **connected components** of a graph.
+        - DFS can handle both **directed** and **undirected** graphs.
+        - If multiple paths to the goal exist, DFS may not find the **shortest path**.
+        """)
+
+    if 'graph' not in st.session_state:
+        st.session_state.graph = nx.Graph()
+    if 'nodes' not in st.session_state:
+        st.session_state.nodes = []
+    if 'edges' not in st.session_state:
+        st.session_state.edges = {}
+    if 'start_node' not in st.session_state:
+        st.session_state.start_node = ""
+    if 'goal_node' not in st.session_state:
+        st.session_state.goal_node = ""
+    if 'path' not in st.session_state:
+        st.session_state.path = None
+    if 'input_complete' not in st.session_state:
+        st.session_state.input_complete = False
+
+    graph_type = st.radio("Choose Graph Type:", ["Undirected Graph", "Directed Graph"])
+    is_directed = graph_type == "Directed Graph"
+
+    if graph_type == "Undirected Graph":
+        if st.session_state.graph is None or not isinstance(st.session_state.graph, nx.Graph):
+            st.session_state.graph = nx.Graph()
+    else:
+        if st.session_state.graph is None or not isinstance(st.session_state.graph, nx.DiGraph):
+            st.session_state.graph = nx.DiGraph()
+
+    input_method = st.radio("Choose input method:", ["Manual Input", "Random Graph Generation"])
+
+    if input_method == "Manual Input":
+        if not st.session_state.nodes:
+            nodes_input = st.text_input("Enter all nodes (comma-separated):", key="nodes_input")
+            if st.button("Submit Nodes") and nodes_input:
+                st.session_state.nodes = [node.strip() for node in nodes_input.split(',')]
+                st.session_state.edges = {node: [] for node in st.session_state.nodes}
+
+        if st.session_state.nodes:
+            st.subheader("Enter connections for each node")
+            for node in st.session_state.nodes:
+                connections = st.text_input(f"Enter connections for {node}:", key=f"conn_{node}")
+                if st.button(f"Submit Connections for {node}", key=f"btn_{node}") and connections:
+                    dests = [dest.strip() for dest in connections.split(',')]
+                    st.session_state.edges[node].extend(dests)
+                    for dest in dests:
+                        if is_directed:
+                            st.session_state.graph.add_edge(node, dest)
+                        else:
+                            st.session_state.graph.add_edge(node, dest)
+
+            if all(st.session_state.edges[node] for node in st.session_state.nodes):
+                st.session_state.input_complete = True
+
+    elif input_method == "Random Graph Generation":
+        st.subheader("Random Graph Generator")
+        num_nodes = st.number_input("Enter the number of nodes:", min_value=2, step=1)
+        num_edges = st.number_input("Enter the number of edges:", min_value=1, step=1)
+
+        if st.button("Generate Random Graph"):
+            st.session_state.graph.clear()
+            st.session_state.nodes = [str(i) for i in range(1, num_nodes + 1)]
+            st.session_state.edges = {node: [] for node in st.session_state.nodes}
+            st.session_state.graph.add_nodes_from(st.session_state.nodes)
+
+            for _ in range(num_edges):
+                u, v = random.sample(st.session_state.nodes, 2)
+                if is_directed:
+                    st.session_state.graph.add_edge(u, v)
+                else:
+                    st.session_state.graph.add_edge(u, v)
+                st.session_state.edges[u].append(v)
+
+            st.session_state.input_complete = True
+            st.success("Random graph generated successfully!")
+
+    if st.session_state.input_complete:
+        st.subheader("Connections Summary")
+        for node in st.session_state.nodes:
+            st.write(f"{node}: {', '.join(st.session_state.edges[node])}")
+
+        st.subheader("Select Start and Goal Nodes")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.session_state.start_node = st.selectbox("Select the starting node:", st.session_state.nodes)
+        with col2:
+            st.session_state.goal_node = st.selectbox("Select the goal node:", st.session_state.nodes)
+
+        if st.session_state.start_node and st.session_state.goal_node:
+            if st.button("Find Path"):
+                st.session_state.path = dfs_algorithm_visual(st.session_state.graph, st.session_state.start_node, st.session_state.goal_node)
+                if st.session_state.path:
+                    st.success(f"Path found: {' -> '.join(st.session_state.path)}")
+                else:
+                    st.error("No path found.")
+
+    if st.session_state.path or st.session_state.goal_node:
+        st.subheader("Full Graph:")
+        visualize_graph(st.session_state.graph)
+
+        if st.session_state.path:
+            st.subheader("Graph with Path:")
+            visualize_graph(st.session_state.graph, st.session_state.path)
+
+    if st.button("Reset"):
+        st.session_state.clear()
+
+def dfs_algorithm_visual(graph, start, goal):
+    stack = [[start]]
+    visited = set()
+
+    while stack:
+        path = stack.pop()
+        node = path[-1]
+
+        if node == goal:
+            return path
+
+        if node not in visited:
+            visited.add(node)
+            neighbors = sorted(graph.neighbors(node))
+
+            for neighbor in neighbors:
+                if neighbor not in visited:
+                    new_path = list(path)
+                    new_path.append(neighbor)
+                    stack.append(new_path)
+
+                    visualize_graph(graph, new_path)
+                    st.write(f"Exploring path: {' -> '.join(new_path)}")
+                    time.sleep(1)   
+
+    return None
+
+dfs_search()
